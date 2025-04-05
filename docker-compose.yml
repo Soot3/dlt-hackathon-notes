@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  hack-postgres:
+    image: postgres:15
+    container_name: hack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  hack-minio:
+    image: minio/minio
+    container_name: hack-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio-data:/data
+
+  hack-mc:
+    image: minio/mc
+    container_name: hack-mc
+    depends_on:
+      - hack-minio
+    entrypoint: >
+      /bin/sh -c "
+        sleep 5;
+        mc alias set local http://hack-minio:9000 minio minio123;
+        mc mb -p local/demo;
+        mc ls local;
+        exit 0;
+      "
+
+  sqlpad:
+    image: sqlpad/sqlpad:latest
+    container_name: sqlpad
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SQLPAD_ADMIN: admin
+      SQLPAD_ADMIN_PASSWORD: admin123
+      SQLPAD_APP_LOG_LEVEL: info
+      SQLPAD_CONNECTIONS__pg__name: Postgres
+      SQLPAD_CONNECTIONS__pg__driver: postgres
+      SQLPAD_CONNECTIONS__pg__host: hack-postgres
+      SQLPAD_CONNECTIONS__pg__port: 5432
+      SQLPAD_CONNECTIONS__pg__database: postgres
+      SQLPAD_CONNECTIONS__pg__username: postgres
+      SQLPAD_CONNECTIONS__pg__password: postgres
+      SQLPAD_CONNECTIONS__pg__multiStatementTransactionEnabled: "true"
+    depends_on:
+      - hack-postgres
+
+volumes:
+  pgdata:
+  minio-data:
